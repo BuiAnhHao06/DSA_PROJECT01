@@ -271,3 +271,45 @@ insertRecursive():
 
 - insert từ root xuống leaf
 - xử lý split lan ngược lên trên
+
+
+## Day3
+### Test kich thuoc struct
+* Test: 
+``` cpp
+cout << "sizeof(Record) = " << sizeof(Record) << "\n";
+
+cout << "sizeof(DBHeader) = " << sizeof(DBHeader) << "\n";
+
+cout << "sizeof(BPlusNode) = " << sizeof(BPlusNode) << "\n";
+```
+* Output:
+``` text
+sizeof(Record) = 64
+sizeof(DBHeader) = 4096
+sizeof(BPlusNode) = 4092
+```
+
+### Quy uoc offset
+
+Offset được tính theo byte trong file.
+
+Page 0:
+offset = 0
+chứa DBHeader
+
+Page 1:
+offset = 4096
+chứa node đầu tiên
+
+Page 2:
+offset = 8192
+
+Page 3:
+offset = 12288
+
+Công thức: offset = page_number * PAGE_SIZE
+
+
+PAGE_SIZE = 4096
+Do đó: node đầu tiên có offset = 4096
