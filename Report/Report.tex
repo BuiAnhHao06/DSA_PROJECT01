@@ -1,0 +1,252 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{amsmath}
+\usepackage{float}
+
+\title{Lab 1 Report: Database Storage Engine with On-Disk B+ Tree}
+\author{StudentID1 -- StudentID2}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This report presents the design and evaluation of a simple database storage engine using an on-disk B+ Tree. The system stores fixed-size records inside 4KB pages and uses byte offsets instead of memory pointers to connect tree nodes. We compare B-Tree style and B+ Tree style query strategies under linear search and binary search inside nodes. The benchmark focuses on execution time and disk read count for point queries and range queries across multiple dataset sizes. The expected result is that point query performance mainly follows the height of the tree, while range query performance strongly favors the B+ Tree style because leaf nodes are connected by a linked list.
+\end{abstract}
+
+\section{Introduction}
+
+Modern database systems usually manage datasets that are larger than available RAM. As a result, data must be stored on disk and accessed in fixed-size pages. Since disk access is much slower than CPU and memory operations, the number of page reads becomes a major performance factor.
+
+This lab implements a storage engine based on an on-disk B+ Tree. The project compares two query styles:
+
+\begin{itemize}
+    \item \textbf{B-Tree Style Search}: repeatedly traverses the tree from the root to find records.
+    \item \textbf{B+ Tree Style Search}: uses the linked list between leaf nodes to scan range query results efficiently.
+\end{itemize}
+
+The experiment also compares two internal search strategies inside each node: linear search and binary search. The goal is to understand the interaction between CPU cost inside a page and disk I/O cost across pages.
+
+\section{Data Structures and Disk Layout}
+
+\subsection{Record}
+
+Each record contains an integer key and a fixed-size payload:
+
+\begin{itemize}
+    \item \texttt{id}: the key used for searching and ordering.
+    \item \texttt{payload}: a simulated data field with 60 bytes.
+\end{itemize}
+
+The total size of one record is 64 bytes. Therefore, a leaf page can store up to 60 records while remaining within the 4096-byte page size.
+
+\subsection{B+ Tree Node}
+
+Each B+ Tree node is stored as exactly one disk page. A node can be either a leaf node or an internal node.
+
+\textbf{Leaf nodes} store actual records. They also contain \texttt{next\_leaf\_offset}, which points to the next leaf page on disk. This field is essential for efficient range queries because it allows the query engine to move from one leaf to the next without returning to the root.
+
+\textbf{Internal nodes} store separator keys and child offsets. They do not store payload data. Their purpose is to guide the search from the root down to the correct leaf.
+
+\subsection{Database Header}
+
+The first page of the file stores the database header. It contains:
+
+\begin{itemize}
+    \item \texttt{root\_offset}: byte offset of the current root node.
+    \item \texttt{total\_nodes}: total number of allocated nodes.
+    \item \texttt{free\_list\_offset}: offset of the first reusable page, if any.
+\end{itemize}
+
+\subsection{Disk Layout}
+
+The database file is divided into fixed-size pages:
+
+\[
+\text{offset of page } k = 4096 \times k
+\]
+
+The header is stored at offset 0. All tree nodes are stored after the header. The implementation must use byte offsets instead of memory pointers because nodes are stored on disk, not permanently in RAM.
+
+\section{Implementation Methodology}
+
+\subsection{Disk I/O Functions}
+
+The storage engine uses three core file management functions:
+
+\begin{itemize}
+    \item \texttt{readNode}: seeks to a byte offset and reads one 4096-byte page into memory.
+    \item \texttt{writeNode}: seeks to a byte offset and writes one 4096-byte page back to disk.
+    \item \texttt{allocateNode}: allocates a new page at the end of the file and updates metadata.
+\end{itemize}
+
+Every call to \texttt{readNode} increments the disk read counter. This counter is used to measure the I/O cost of each query.
+
+\subsection{Insertion}
+
+Insertion starts at the root and follows internal node separator keys until reaching the correct leaf node. The new record is inserted into sorted order inside the leaf.
+
+If a leaf exceeds its maximum capacity, it is split into two leaf nodes. The first key of the right leaf is copied upward as the separator key. Unlike an internal split, this separator remains inside the leaf because all actual records in a B+ Tree are stored at the leaf level. The leaf linked list is also updated:
+
+\[
+\text{old leaf} \rightarrow \text{new leaf} \rightarrow \text{old next leaf}
+\]
+
+If an internal node overflows, the median key is pushed up to the parent. The median key is removed from the split children. If the root overflows, a new root is created and \texttt{header.root\_offset} is updated.
+
+\subsection{Point Query}
+
+A point query searches for one target key. The query starts at the root and repeatedly selects the child offset whose key range may contain the target. Once the query reaches a leaf, it searches the records in that leaf.
+
+For point queries, B-Tree style and B+ Tree style behave similarly because both must traverse from root to leaf. Therefore, the disk read count is expected to be close to the tree height.
+
+\subsection{Range Query}
+
+A range query counts records with keys in the interval $[L, R]$.
+
+In the B+ Tree style implementation, the query first traverses from the root to the first leaf that may contain $L$. It then scans records in that leaf and continues through \texttt{next\_leaf\_offset} until it reaches a key greater than $R$ or the end of the leaf list.
+
+In the B-Tree style implementation, the query repeatedly performs root-to-leaf searches for candidate keys in the range. This causes many repeated reads of upper-level pages and is expected to be much less efficient for large ranges.
+
+\subsection{Internal Search Strategies}
+
+Inside each node, two search strategies are compared:
+
+\begin{itemize}
+    \item \textbf{Linear Search}: scans keys from left to right. Its CPU cost is $O(m)$ for $m$ keys in a node.
+    \item \textbf{Binary Search}: uses the sorted order of keys. Its CPU cost is $O(\log m)$.
+\end{itemize}
+
+These strategies affect CPU time, but they should not significantly affect disk read count because both operate on a page that has already been loaded into memory.
+
+\section{Experimental Setup}
+
+The dataset is generated by \texttt{data\_generator.cpp}. It contains random IDs and fixed-size payload strings. The tested dataset sizes are:
+
+\[
+1000,\ 3000,\ 10000,\ 30000,\ 100000,\ 300000,\ 1000000,\ 3000000,\ 10000000
+\]
+
+For each dataset size, 100 queries are executed and averaged. For each query, the program resets the disk read counter and measures only query execution time using \texttt{chrono}. CSV loading and index construction time are excluded from the benchmark.
+
+The range size is 500 for $N=1000$ and 1000 for the remaining dataset sizes.
+
+\section{Results}
+
+\subsection{Point Query Results}
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{2.2cm} p{3.0cm} p{3.0cm} p{3.0cm} p{3.0cm}}
+\caption{Point Query Performance: Mean Time (ns) and Mean Disk Reads}\\
+\toprule
+\textbf{Data Size} & \textbf{B-Tree Linear} & \textbf{B-Tree Binary} & \textbf{B+ Tree Linear} & \textbf{B+ Tree Binary} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Data Size} & \textbf{B-Tree Linear} & \textbf{B-Tree Binary} & \textbf{B+ Tree Linear} & \textbf{B+ Tree Binary} \\
+\midrule
+\endhead
+1,000 & TODO & TODO & TODO & TODO \\
+3,000 & TODO & TODO & TODO & TODO \\
+10,000 & TODO & TODO & TODO & TODO \\
+30,000 & TODO & TODO & TODO & TODO \\
+100,000 & TODO & TODO & TODO & TODO \\
+300,000 & TODO & TODO & TODO & TODO \\
+1,000,000 & TODO & TODO & TODO & TODO \\
+3,000,000 & TODO & TODO & TODO & TODO \\
+10,000,000 & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{longtable}
+
+\subsection{Range Query Results}
+
+\begin{longtable}{>{\raggedright\arraybackslash}p{2.2cm} p{3.0cm} p{3.0cm} p{3.0cm} p{3.0cm}}
+\caption{Range Query Performance: Mean Time (ns) and Mean Disk Reads}\\
+\toprule
+\textbf{Data Size} & \textbf{B-Tree Linear} & \textbf{B-Tree Binary} & \textbf{B+ Tree Linear} & \textbf{B+ Tree Binary} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Data Size} & \textbf{B-Tree Linear} & \textbf{B-Tree Binary} & \textbf{B+ Tree Linear} & \textbf{B+ Tree Binary} \\
+\midrule
+\endhead
+1,000 & TODO & TODO & TODO & TODO \\
+3,000 & TODO & TODO & TODO & TODO \\
+10,000 & TODO & TODO & TODO & TODO \\
+30,000 & TODO & TODO & TODO & TODO \\
+100,000 & TODO & TODO & TODO & TODO \\
+300,000 & TODO & TODO & TODO & TODO \\
+1,000,000 & TODO & TODO & TODO & TODO \\
+3,000,000 & TODO & TODO & TODO & TODO \\
+10,000,000 & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{longtable}
+
+\subsection{Charts}
+
+At least two log-scale charts should be inserted after benchmark values are collected:
+
+\begin{itemize}
+    \item Point query: dataset size versus mean disk reads or mean time.
+    \item Range query: dataset size versus mean disk reads or mean time.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.85\linewidth}{\centering TODO: Insert log-scale chart for point query performance.}}
+    \caption{Point query performance across dataset sizes.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \fbox{\parbox{0.85\linewidth}{\centering TODO: Insert log-scale chart for range query performance.}}
+    \caption{Range query performance across dataset sizes.}
+\end{figure}
+
+\section{Discussion}
+
+\subsection{Range Query Performance and Disk I/O Bottleneck}
+
+The B+ Tree style range query is expected to outperform the B-Tree style range query because it reads the upper levels of the tree only once. After locating the first relevant leaf, it follows \texttt{next\_leaf\_offset} to scan consecutive leaves.
+
+In contrast, the B-Tree style approach repeatedly starts from the root for many records in the range. This causes repeated reads of the same internal pages and increases disk I/O. As $N$ grows, the cost of repeated traversal becomes more visible, especially for range queries with hundreds or thousands of records.
+
+\subsection{B+ Tree Height and Branching Factor}
+
+The point query disk read count should grow slowly as the dataset size increases. This is because each internal node can contain up to 510 keys and 511 child offsets, giving the tree a large branching factor. A large branching factor keeps the tree shallow, so the height grows logarithmically rather than linearly.
+
+For an on-disk tree, a shallow height is very important. Each additional level usually means one extra page read during point queries. Therefore, the page-based node structure directly reduces disk I/O by storing many separator keys in each internal node.
+
+\subsection{CPU-Bound and I/O-Bound Interaction}
+
+Linear search and binary search mainly affect CPU time inside a page. They should not significantly change disk read count because both strategies examine data that has already been loaded from disk.
+
+Binary search is expected to be faster when internal nodes contain many keys. However, when disk I/O dominates total query time, the improvement from binary search may appear smaller than the improvement from reducing page reads. If the page size were increased to 16KB or 32KB, each node would contain more keys, making binary search more valuable because the CPU cost of linear scanning would increase.
+
+\subsection{Data Fragmentation and System Reality}
+
+The dataset inserts records in random key order. Random insertion causes leaf splits at many logical positions in the tree. Newly allocated leaves are appended to the end of the file, so logically adjacent leaves may not be physically adjacent on disk.
+
+This fragmentation can reduce sequential read benefits. On HDDs, fragmented logical scans may cause more seek movement and higher latency. On SSDs, random access is cheaper, but fragmentation can still reduce cache locality and increase the number of scattered page reads.
+
+Real database systems use several techniques to reduce or hide this cost. Buffer pools cache frequently used pages in memory. Fill factors leave free space in pages to reduce immediate splits. Periodic maintenance can reorganize fragmented indexes. Some storage engines also use log-structured designs, such as LSM Trees, to transform random writes into more sequential write patterns.
+
+\section{Conclusion}
+
+This lab demonstrates why B+ Trees are widely used in database storage engines. By storing all records in leaf nodes and linking leaves together, a B+ Tree supports efficient range queries while maintaining logarithmic point query performance. The benchmark is expected to show that point queries are mainly controlled by tree height, while range queries benefit greatly from the leaf linked list. The comparison between linear and binary search shows that CPU optimization inside a node matters, but disk I/O remains the dominant factor for large on-disk datasets.
+
+\section{References}
+
+\begin{itemize}
+    \item Course lab specification: \textit{Database Storage Engine with On-Disk B+ Tree}.
+    \item Project source files: \texttt{bplus\_tree\_disk.h}, \texttt{main.cpp}, and \texttt{data\_generator.cpp}.
+    \item Database indexing concepts: B-Trees, B+ Trees, page-based storage, and disk I/O.
+\end{itemize}
+
+\end{document}
