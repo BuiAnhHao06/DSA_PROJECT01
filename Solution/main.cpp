@@ -4,6 +4,7 @@
 #include <string>
 #include <cstring>
 #include <chrono>
+#include <vector>
 #include "bplus_tree_disk.h"
 
 using namespace std;
@@ -11,6 +12,86 @@ using namespace std::chrono;
 
 FILE* db_file = nullptr;
 DBHeader header;
+
+struct AppConfig {
+    string dataset_file = "dataset_large.csv";
+    string index_prefix = "index_";
+    int query_count = 10;
+    int range_threshold = 2000;
+    int range_small = 50;
+    int range_large = 100;
+    vector<int> data_sizes = {100, 500, 1000};
+};
+
+static string trim(const string& value) {
+    size_t start = value.find_first_not_of(" \t\r\n");
+    if (start == string::npos) {
+        return "";
+    }
+    size_t end = value.find_last_not_of(" \t\r\n");
+    return value.substr(start, end - start + 1);
+}
+
+static vector<int> parseIntList(const string& value) {
+    vector<int> result;
+    stringstream ss(value);
+    string item;
+
+    while (getline(ss, item, ',')) {
+        item = trim(item);
+        if (!item.empty()) {
+            result.push_back(stoi(item));
+        }
+    }
+
+    return result;
+}
+
+static AppConfig loadConfig(const string& path) {
+    AppConfig config;
+    ifstream file(path);
+    if (!file.is_open()) {
+        cout << "Config file '" << path << "' not found. Using defaults.\n";
+        return config;
+    }
+
+    string line;
+    while (getline(file, line)) {
+        line = trim(line);
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+
+        size_t separator = line.find('=');
+        if (separator == string::npos) {
+            continue;
+        }
+
+        string key = trim(line.substr(0, separator));
+        string value = trim(line.substr(separator + 1));
+
+        if (key == "dataset_file") {
+            config.dataset_file = value;
+        } else if (key == "index_prefix") {
+            config.index_prefix = value;
+        } else if (key == "query_count") {
+            config.query_count = stoi(value);
+        } else if (key == "range_threshold") {
+            config.range_threshold = stoi(value);
+        } else if (key == "range_small") {
+            config.range_small = stoi(value);
+        } else if (key == "range_large") {
+            config.range_large = stoi(value);
+        } else if (key == "data_sizes") {
+            vector<int> parsed_sizes = parseIntList(value);
+            if (!parsed_sizes.empty()) {
+                config.data_sizes = parsed_sizes;
+            }
+        }
+    }
+
+    return config;
+}
 
 // TODO for students: Implement Disk I/O counters and helper functions:
 // int disk_read_count = 0;
@@ -29,46 +110,61 @@ DBHeader header;
 // int rangeQueryBPlusStyle(int start_id, int end_id, bool use_binary_search);
 // int rangeQueryBTreeStyle(int start_id, int end_id, bool use_binary_search);
 
-void runBenchmark(int N, const int query_ids[]) {
+void runBenchmark(int N, const vector<int>& query_ids, const AppConfig& config) {
     cout << "\n========== BENCHMARK WITH N = " << N << " ==========\n";
     
-    int range_size = (N < 2000) ? 500 : 1000;
+    int range_size = (N < config.range_threshold) ? config.range_small : config.range_large;
 
-    // TODO for students: Run 100 queries (using query_ids) for each of the 8 scenarios.
+    // TODO for students: Run config.query_count queries (using query_ids) for each of the 8 scenarios.
     // Calculate and print the average Execution Time (ns) and Disk Reads.
     // Hint: start_id for Range Query is query_ids[j], and end_id is query_ids[j] + range_size.
+    cout << "Configured query count: " << query_ids.size() << "\n";
+    cout << "Configured range size: " << range_size << "\n";
 }
 
 int main() {
-    // Preload the first 100 IDs from dataset_large.csv to serve as benchmark target IDs
-    int query_ids[100];
-    ifstream csv_setup_file("dataset_large.csv");
+    AppConfig config = loadConfig("config.txt");
+
+    if (config.query_count <= 0) {
+        cerr << "Error: query_count must be positive.\n";
+        return 1;
+    }
+    if (config.data_sizes.empty()) {
+        cerr << "Error: data_sizes must contain at least one value.\n";
+        return 1;
+    }
+
+    // Preload query IDs from the configured dataset to serve as benchmark target IDs
+    vector<int> query_ids;
+    query_ids.reserve(config.query_count);
+
+    ifstream csv_setup_file(config.dataset_file);
     if (!csv_setup_file.is_open()) {
-        cerr << "Error: Could not find dataset_large.csv. Run data_generator.cpp first!\n";
+        cerr << "Error: Could not find " << config.dataset_file << ". Run data_generator.cpp first!\n";
         return 1;
     }
     string setup_line;
     getline(csv_setup_file, setup_line); // Skip header row
-    int query_count = 0;
-    while (query_count < 100 && getline(csv_setup_file, setup_line)) {
+    while ((int)query_ids.size() < config.query_count && getline(csv_setup_file, setup_line)) {
         stringstream ss(setup_line);
         string id_str;
         getline(ss, id_str, ',');
-        query_ids[query_count++] = stoi(id_str);
+        query_ids.push_back(stoi(id_str));
     }
     csv_setup_file.close();
 
-    if (query_count < 100) {
-        cerr << "Error: dataset_large.csv does not contain enough records (100 required) for benchmarking!\n";
+    if ((int)query_ids.size() < config.query_count) {
+        cerr << "Error: " << config.dataset_file << " does not contain enough records ("
+             << config.query_count << " required) for benchmarking!\n";
         return 1;
     }
 
-    const int DATA_SIZES[] = {1000, 3000, 10000, 30000, 100000, 300000, 1000000, 3000000, 10000000};
-    const int NUM_SIZES = sizeof(DATA_SIZES) / sizeof(DATA_SIZES[0]);
+    cout << "Dataset file: " << config.dataset_file << "\n";
+    cout << "Query count: " << config.query_count << "\n";
 
-    for (int i = 0; i < NUM_SIZES; ++i) {
-        int N = DATA_SIZES[i];
-        string filename = "index_" + to_string(N) + ".dat";
+    for (size_t i = 0; i < config.data_sizes.size(); ++i) {
+        int N = config.data_sizes[i];
+        string filename = config.index_prefix + to_string(N) + ".dat";
         
         // TODO for students: Open or initialize the index_N.dat binary DB file at offset 0
         // ...
@@ -80,9 +176,9 @@ int main() {
         /*
         if (header.root_offset == -1) {
             cout << "Importing " << N << " records...\n";
-            ifstream csv_file("dataset_large.csv");
+            ifstream csv_file(config.dataset_file);
             if (!csv_file.is_open()) {
-                cerr << "Error: Could not find dataset_large.csv!\n";
+                cerr << "Error: Could not find " << config.dataset_file << "!\n";
                 // fclose(db_file);
                 return 1;
             }
@@ -101,7 +197,8 @@ int main() {
         */
 
         // Run benchmark on this database file
-        // runBenchmark(N, query_ids);
+        // runBenchmark(N, query_ids, config);
+        cout << "Prepared benchmark file name: " << filename << "\n";
 
         // TODO for students: Close the file
         // fclose(db_file);
