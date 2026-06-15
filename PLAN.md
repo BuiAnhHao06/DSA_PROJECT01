@@ -272,44 +272,220 @@ insertRecursive():
 - insert từ root xuống leaf
 - xử lý split lan ngược lên trên
 
+---
 
-## Day3
-### Test kich thuoc struct
-* Test: 
-``` cpp
-cout << "sizeof(Record) = " << sizeof(Record) << "\n";
+# 10. Các hàm Query và Benchmark cần cài đặt
 
-cout << "sizeof(DBHeader) = " << sizeof(DBHeader) << "\n";
+## 10.1 Internal Search trong một node
 
-cout << "sizeof(BPlusNode) = " << sizeof(BPlusNode) << "\n";
-```
-* Output:
-``` text
-sizeof(Record) = 64
-sizeof(DBHeader) = 4096
-sizeof(BPlusNode) = 4092
-```
+Cần cài đặt 2 cách tìm vị trí key trong mảng đã được sắp xếp:
 
-### Quy uoc offset
+linearSearch(keys, num_keys, target)
 
-Offset được tính theo byte trong file.
+- Duyệt lần lượt từ trái sang phải.
+- Dễ cài đặt.
+- Chi phí CPU là O(m), với m là số key trong node.
 
-Page 0:
-offset = 0
-chứa DBHeader
+binarySearch(keys, num_keys, target)
 
-Page 1:
-offset = 4096
-chứa node đầu tiên
+- Chia đôi phạm vi tìm kiếm.
+- Phù hợp vì key trong node luôn được sắp xếp tăng dần.
+- Chi phí CPU là O(log m).
 
-Page 2:
-offset = 8192
+Hai hàm này không làm thay đổi số lần đọc đĩa, vì chúng chỉ xử lý dữ liệu đã được đọc vào RAM.
 
-Page 3:
-offset = 12288
+---
 
-Công thức: offset = page_number * PAGE_SIZE
+## 10.2 Point Query
 
+Mục tiêu:
 
-PAGE_SIZE = 4096
-Do đó: node đầu tiên có offset = 4096
+Tìm một record có id = target_id.
+
+Quy trình:
+
+1. Đọc root node từ header.root_offset
+2. Nếu là internal node:
+   - dùng linear search hoặc binary search để chọn child_offset phù hợp
+   - đọc node con từ file
+3. Lặp lại cho tới khi gặp leaf node
+4. Tìm target_id trong records[] của leaf
+5. Nếu tìm thấy thì trả về true, ngược lại trả về false
+
+Point Query B+ Tree và B-Tree Style gần giống nhau vì đều phải đi từ root xuống leaf.
+
+Kết quả quan trọng cần đo:
+
+- thời gian chạy trung bình
+- số lần đọc page từ đĩa
+
+---
+
+## 10.3 Range Query
+
+Mục tiêu:
+
+Đếm số record có id nằm trong đoạn [start_id, end_id].
+
+### B+ Tree Style Range Query
+
+Quy trình:
+
+1. Đi từ root xuống leaf đầu tiên có thể chứa start_id
+2. Quét records[] trong leaf hiện tại
+3. Nếu chưa vượt quá end_id thì đi sang leaf kế tiếp bằng next_leaf_offset
+4. Dừng khi:
+   - key hiện tại > end_id
+   - hoặc next_leaf_offset = -1
+
+Ưu điểm:
+
+- Không cần quay lại internal node nhiều lần.
+- Các leaf được nối thành linked list.
+- Range query chỉ cần đọc các leaf liên tiếp theo thứ tự logic.
+
+### B-Tree Style Range Query
+
+Quy trình:
+
+Với từng id trong đoạn [start_id, end_id], thực hiện lại thao tác point query từ root xuống leaf.
+
+Nhược điểm:
+
+- Mỗi record có thể phải đọc lại root và internal nodes.
+- Số lần disk read tăng rất nhanh khi range lớn.
+- Chậm hơn B+ Tree Style khi dữ liệu lớn.
+
+---
+
+## 10.4 Benchmark
+
+Cần chạy benchmark với các kích thước dữ liệu:
+
+- 1,000
+- 3,000
+- 10,000
+- 30,000
+- 100,000
+- 300,000
+- 1,000,000
+- 3,000,000
+- 10,000,000
+
+Với mỗi kích thước N, chạy 8 trường hợp:
+
+Point Query:
+
+- B-Tree Style + Linear Search
+- B-Tree Style + Binary Search
+- B+ Tree Style + Linear Search
+- B+ Tree Style + Binary Search
+
+Range Query:
+
+- B-Tree Style + Linear Search
+- B-Tree Style + Binary Search
+- B+ Tree Style + Linear Search
+- B+ Tree Style + Binary Search
+
+Mỗi trường hợp chạy 100 query và lấy trung bình:
+
+- Mean Time (ns)
+- Mean Disk Reads
+
+Trước mỗi query cần reset:
+
+- disk_read_count = 0
+- bộ đo thời gian bằng chrono
+
+Chỉ đo thời gian query, không đo thời gian đọc CSV hoặc build index.
+
+# 11. Kiểm thử, kết quả mong đợi và phân tích báo cáo
+
+## 11.1 Kiểm thử đúng sai
+
+Trước khi benchmark dữ liệu lớn, cần kiểm thử với dữ liệu nhỏ.
+
+Các test cơ bản:
+
+- Insert 1 record vào cây rỗng.
+- Insert nhiều record nhưng chưa split leaf.
+- Insert đủ nhiều để xảy ra leaf split.
+- Insert đủ nhiều để xảy ra internal split.
+- Insert đủ nhiều để xảy ra root split.
+- Kiểm tra header.root_offset sau khi root split.
+- Kiểm tra next_leaf_offset sau khi leaf split.
+- Query id tồn tại.
+- Query id không tồn tại.
+- Range query trên một leaf.
+- Range query đi qua nhiều leaf.
+
+Kết quả cần đảm bảo:
+
+- Các key trong mỗi node luôn tăng dần.
+- Tất cả record thật chỉ nằm ở leaf.
+- Internal node chỉ dùng để điều hướng.
+- Leaf linked list không bị đứt.
+- Không đọc hoặc ghi lệch page 4096 bytes.
+
+---
+
+## 11.2 Kết quả mong đợi
+
+Point Query:
+
+- Disk Reads xấp xỉ chiều cao của cây.
+- Khi N tăng, số lần đọc đĩa tăng chậm vì B+ Tree có branching factor lớn.
+- Binary Search thường nhanh hơn Linear Search về CPU time, nhưng Disk Reads gần như không đổi.
+
+Range Query:
+
+- B+ Tree Style phải nhanh hơn rõ rệt so với B-Tree Style.
+- B+ Tree Style tận dụng next_leaf_offset để scan leaf liên tiếp.
+- B-Tree Style bị chậm vì phải lặp lại traversal từ root cho nhiều key.
+
+Với dữ liệu rất lớn:
+
+- Disk I/O là bottleneck chính.
+- Chênh lệch giữa B+ Tree Style và B-Tree Style thể hiện rõ nhất ở range query.
+- Chênh lệch giữa Linear Search và Binary Search chủ yếu thể hiện ở thời gian CPU, không phải số lần đọc đĩa.
+
+---
+
+## 11.3 Nội dung cần đưa vào Report
+
+Report cần có:
+
+- Mô tả cấu trúc Record, BPlusNode, DBHeader.
+- Giải thích disk layout theo page 4096 bytes.
+- Trình bày thuật toán insert, leaf split, internal split, root split.
+- Trình bày thuật toán point query và range query.
+- Bảng kết quả benchmark cho point query.
+- Bảng kết quả benchmark cho range query.
+- Ít nhất 2 biểu đồ log-scale.
+- Phân tích vì sao B+ Tree tối ưu cho range query.
+- Phân tích ảnh hưởng của branching factor tới chiều cao cây.
+- Phân tích CPU-bound và I/O-bound.
+- Phân tích fragmentation khi insert random records.
+
+---
+
+## 11.4 Lưu ý khi nộp bài
+
+Không nộp:
+
+- dataset_large.csv
+- index.dat
+- index_N.dat
+- file .exe
+- file .o
+- build directory
+
+Chỉ nộp:
+
+- source code trong thư mục Solution/
+- Report.pdf
+
+Tên file nộp theo format:
+
+[StudentID1]_[StudentID2]_Lab1.zip
