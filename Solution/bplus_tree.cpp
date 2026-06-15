@@ -1,6 +1,5 @@
 #include "bplus_tree.h"
 
-
 void readNode(int offset, BPlusNode &node)
 {
     if (db_file == nullptr)
@@ -9,9 +8,13 @@ void readNode(int offset, BPlusNode &node)
         return;
     }
 
-    fseek(db_file, offset, SEEK_SET);
+    if (fseek(db_file, offset, SEEK_SET) != 0)
+    {
+        std::cerr << "Seek before read node failed.\n";
+        return;
+    }
 
-    int result = fread(&node, sizeof(BPlusNode), 1, db_file);
+    size_t result = fread(&node, sizeof(BPlusNode), 1, db_file);
 
     if (result != 1)
     {
@@ -30,9 +33,13 @@ void writeNode(int offset, BPlusNode &node)
         return;
     }
 
-    fseek(db_file, offset, SEEK_SET);
+    if (fseek(db_file, offset, SEEK_SET) != 0)
+    {
+        std::cerr << "Seek before write node failed.\n";
+        return;
+    }
 
-    int result = fwrite(&node, sizeof(BPlusNode), 1, db_file);
+    size_t result = fwrite(&node, sizeof(BPlusNode), 1, db_file);
 
     if (result != 1)
     {
