@@ -6,11 +6,12 @@
 #include <chrono>
 #include <vector>
 #include "bplus_tree_disk.h"
+#include "bplus_tree.h"
 
 using namespace std;
 using namespace std::chrono;
 
-FILE* db_file = nullptr;
+FILE *db_file = nullptr;
 DBHeader header;
 
 struct AppConfig {
@@ -97,6 +98,14 @@ static AppConfig loadConfig(const string& path) {
 // int disk_read_count = 0;
 // int disk_write_count = 0;
 // void resetIOCounters();
+
+int disk_read_count = 0;
+int disk_write_count = 0;
+void resetIOCounters()
+{
+    disk_read_count = 0;
+    disk_write_count = 0;
+}
 
 // TODO for students: Implement page read/write, search, insert, and query functions...
 // void readNode(int offset, BPlusNode& node);

@@ -57,6 +57,13 @@ Expected final output:
 ```txt
 PASS: smoke pipeline completed successfully.
 ```
+## Unit Tests
+
+```bash
+tests/unit_node_io.sh
+```
+
+This test verifies that a fake leaf node can be written to offset 4096 and read back correctly.
 
 ## Final Benchmark
 
