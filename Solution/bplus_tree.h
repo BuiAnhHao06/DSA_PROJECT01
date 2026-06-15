@@ -3,9 +3,17 @@
 
 #include "bplus_tree_disk.h"
 
-void readNode(FILE *fp, long offset, BPlusNode &node);
+extern FILE* db_file;
+extern DBHeader header;
 
-void writeNode(FILE *fp, long offset, const BPlusNode &node);
+extern int disk_read_count;
+extern int disk_write_count;
+
+void resetIOCounters();
+
+void readNode(int offset, BPlusNode &node);
+
+void writeNode(int offset, BPlusNode &node);
 
 long allocateNode(FILE *fp, DBHeader &header);
 
