@@ -52,13 +52,58 @@ void writeNode(int offset, BPlusNode &node)
     disk_write_count++;
 }
 
-long allocateNode(FILE *fp, DBHeader &header)
+long allocateNode()
 {
-    // TODO
-    return -1;
+    long offset = PAGE_SIZE + header.total_nodes * PAGE_SIZE;
+    header.total_nodes++;
+    writeHeader();
+    return offset;
 }
 
 void insertRecord(FILE *fp, DBHeader &header, int id, const char *payload)
 {
     // TODO
+}
+
+void readHeader()
+{
+    if (db_file == nullptr)
+        return;
+
+    fseek(db_file, 0, SEEK_SET);
+
+    fread(&header, sizeof(DBHeader), 1, db_file);
+}
+
+void writeHeader()
+{
+    if (db_file == nullptr)
+        return;
+
+    fseek(db_file, 0, SEEK_SET);
+
+    fwrite(&header, sizeof(DBHeader), 1, db_file);
+    fflush(db_file);
+}
+
+void openOrCreateDatabase(const char *filename)
+{
+    db_file = fopen(filename, "rb+");
+    if (db_file != nullptr)
+    {
+        readHeader();
+        return;
+    }
+
+    db_file = fopen(filename, "wb+");
+    if (db_file == nullptr)
+    {
+        return;
+    }
+
+    header.root_offset = -1;
+    header.total_nodes = 0;
+    header.free_list_offset = -1;
+
+    writeHeader();
 }
