@@ -25,4 +25,9 @@ void writeHeader();
 
 void openOrCreateDatabase(const char *filename);
 
+int linearSearch(const int keys[], int num_keys, int target);
+
+int binarySearch(const int keys[], int num_keys, int target);
+
+
 #endif

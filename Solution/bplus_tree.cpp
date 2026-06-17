@@ -107,3 +107,31 @@ void openOrCreateDatabase(const char *filename)
 
     writeHeader();
 }
+
+int linearSearch(const int keys[], int num_keys, int target)
+{
+    int i = 0;
+    while (i < num_keys && keys[i] < target)
+        i++;
+
+    return i;
+}
+int binarySearch(const int keys[], int num_keys, int target)
+{
+    int left = 0;
+    int right = num_keys;
+    while (left < right)
+    {
+        int mid = (left + right) / 2;
+        if (keys[mid] < target)
+        {
+            left = mid + 1;
+        }
+        else
+        {
+            right = mid;
+        }
+    }
+
+    return left;
+}
