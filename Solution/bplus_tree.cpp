@@ -60,9 +60,54 @@ long allocateNode()
     return offset;
 }
 
-void insertRecord(FILE *fp, DBHeader &header, int id, const char *payload)
+void insertRecord(int id, const char *payload)
 {
-    // TODO
+    if (header.root_offset == -1)
+    {
+        BPlusNode root;
+
+        memset(&root, 0, sizeof(BPlusNode));
+
+        root.is_leaf = true;
+        root.num_keys = 1;
+        root.leaf.next_leaf_offset = -1;
+
+        root.leaf.records[0].id = id;
+        strcpy(root.leaf.records[0].payload, payload);
+
+        int root_offset = allocateNode();
+
+        header.root_offset = root_offset;
+        writeHeader();
+
+        writeNode(root_offset, root);
+
+        return;
+    }
+
+    BPlusNode root;
+
+    readNode(header.root_offset, root);
+
+    if (root.num_keys >= MAX_LEAF_KEYS)
+        return;
+
+    int pos = 0;
+
+    while (pos < root.num_keys && root.leaf.records[pos].id < id)
+        pos++;
+
+    for (int i = root.num_keys; i > pos; i--)
+    {
+        root.leaf.records[i] = root.leaf.records[i - 1];
+    }
+
+    root.leaf.records[pos].id = id;
+    strcpy(root.leaf.records[pos].payload, payload);
+
+    root.num_keys++;
+
+    writeNode(header.root_offset, root);
 }
 
 void readHeader()
