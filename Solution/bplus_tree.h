@@ -30,5 +30,7 @@ int linearSearch(const int keys[], int num_keys, int target);
 
 int binarySearch(const int keys[], int num_keys, int target);
 
+bool insertRecursive(int current_offset, int id, const char* payload, int& new_key, int& new_offset);
+
 
 #endif

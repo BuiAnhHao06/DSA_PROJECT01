@@ -180,3 +180,85 @@ int binarySearch(const int keys[], int num_keys, int target)
 
     return left;
 }
+
+bool insertRecursive(int current_offset, int id, const char *payload, int &new_key, int &new_offset)
+{
+    BPlusNode node;
+    readNode(current_offset, node);
+
+    if (node.is_leaf)
+    {
+
+        if (node.num_keys < MAX_LEAF_KEYS)
+        {
+            int pos = 0;
+
+            while (pos < node.num_keys && node.leaf.records[pos].id < id)
+                pos++;
+
+            for (int i = node.num_keys; i > pos; i--)
+                node.leaf.records[i] = node.leaf.records[i - 1];
+
+            node.leaf.records[pos].id = id;
+            strcpy(node.leaf.records[pos].payload, payload);
+
+            node.num_keys++;
+            writeNode(current_offset, node);
+
+            return false;
+        }
+
+
+        Record temp[MAX_LEAF_KEYS + 1];
+
+        int pos = 0;
+
+        while (pos < node.num_keys && node.leaf.records[pos].id < id)
+            pos++;
+
+        int i, j;
+
+        for (i = 0, j = 0; i < node.num_keys; i++, j++)
+        {
+            if (j == pos)
+                j++;
+            temp[j] = node.leaf.records[i];
+        }
+
+        temp[pos].id = id;
+        strcpy(temp[pos].payload, payload);
+
+        int split = (MAX_LEAF_KEYS + 1) / 2;
+
+        BPlusNode new_leaf;
+
+        memset(&new_leaf, 0, sizeof(BPlusNode));
+
+        new_leaf.is_leaf = true;
+        node.num_keys = split;
+        new_leaf.num_keys = (MAX_LEAF_KEYS + 1) - split;
+
+        // leaf trái
+        for (i = 0; i < split; i++)
+            node.leaf.records[i] = temp[i];
+
+        // leaf phải
+        for (i = 0; i < new_leaf.num_keys; i++)
+            new_leaf.leaf.records[i] = temp[split + i];
+
+        new_offset = allocateNode();
+
+        new_leaf.leaf.next_leaf_offset = node.leaf.next_leaf_offset;
+
+        node.leaf.next_leaf_offset = new_offset;
+
+        writeNode(current_offset, node);
+        writeNode(new_offset, new_leaf);
+
+        new_key = new_leaf.leaf.records[0].id;
+
+        return true;
+    }
+
+    return false;
+}
