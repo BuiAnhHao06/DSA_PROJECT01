@@ -75,41 +75,43 @@ void insertRecord(int id, const char *payload)
         root.leaf.records[0].id = id;
         strcpy(root.leaf.records[0].payload, payload);
 
-        int root_offset = allocateNode();
+        header.root_offset = allocateNode();
 
-        header.root_offset = root_offset;
+        writeNode(header.root_offset, root);
         writeHeader();
 
-        writeNode(root_offset, root);
-
         return;
     }
 
-    BPlusNode root;
+    int new_key;
+    int new_offset;
 
-    readNode(header.root_offset, root);
+    bool root_split = insertRecursive(header.root_offset, id, payload, new_key, new_offset);
 
-    if (root.num_keys >= MAX_LEAF_KEYS)
+    if (!root_split)
         return;
 
-    int pos = 0;
+    BPlusNode new_root;
 
-    while (pos < root.num_keys && root.leaf.records[pos].id < id)
-        pos++;
+    memset(&new_root, 0, sizeof(BPlusNode));
 
-    for (int i = root.num_keys; i > pos; i--)
-    {
-        root.leaf.records[i] = root.leaf.records[i - 1];
-    }
+    new_root.is_leaf = false;
+    new_root.num_keys = 1;
 
-    root.leaf.records[pos].id = id;
-    strcpy(root.leaf.records[pos].payload, payload);
+    new_root.internal.keys[0] = new_key;
 
-    root.num_keys++;
+    new_root.internal.children_offsets[0] = header.root_offset;
 
-    writeNode(header.root_offset, root);
+    new_root.internal.children_offsets[1] = new_offset;
+
+    int new_root_offset = allocateNode();
+
+    writeNode(new_root_offset, new_root);
+
+    header.root_offset = new_root_offset;
+
+    writeHeader();
 }
-
 void readHeader()
 {
     if (db_file == nullptr)
@@ -188,7 +190,6 @@ bool insertRecursive(int current_offset, int id, const char *payload, int &new_k
 
     if (node.is_leaf)
     {
-
         if (node.num_keys < MAX_LEAF_KEYS)
         {
             int pos = 0;
@@ -197,17 +198,19 @@ bool insertRecursive(int current_offset, int id, const char *payload, int &new_k
                 pos++;
 
             for (int i = node.num_keys; i > pos; i--)
+            {
                 node.leaf.records[i] = node.leaf.records[i - 1];
+            }
 
             node.leaf.records[pos].id = id;
             strcpy(node.leaf.records[pos].payload, payload);
 
             node.num_keys++;
+
             writeNode(current_offset, node);
 
             return false;
         }
-
 
         Record temp[MAX_LEAF_KEYS + 1];
 
@@ -222,6 +225,7 @@ bool insertRecursive(int current_offset, int id, const char *payload, int &new_k
         {
             if (j == pos)
                 j++;
+
             temp[j] = node.leaf.records[i];
         }
 
@@ -235,16 +239,20 @@ bool insertRecursive(int current_offset, int id, const char *payload, int &new_k
         memset(&new_leaf, 0, sizeof(BPlusNode));
 
         new_leaf.is_leaf = true;
+
         node.num_keys = split;
+
         new_leaf.num_keys = (MAX_LEAF_KEYS + 1) - split;
 
-        // leaf trái
         for (i = 0; i < split; i++)
+        {
             node.leaf.records[i] = temp[i];
+        }
 
-        // leaf phải
         for (i = 0; i < new_leaf.num_keys; i++)
+        {
             new_leaf.leaf.records[i] = temp[split + i];
+        }
 
         new_offset = allocateNode();
 
@@ -259,6 +267,37 @@ bool insertRecursive(int current_offset, int id, const char *payload, int &new_k
 
         return true;
     }
+
+    int pos = binarySearch(node.internal.keys, node.num_keys, id);
+
+    if (pos < node.num_keys && id >= node.internal.keys[pos])
+        pos++;
+
+    int child_new_key;
+    int child_new_offset;
+
+    bool child_split = insertRecursive(node.internal.children_offsets[pos], id, payload, child_new_key, child_new_offset);
+
+    if (!child_split)
+        return false;
+
+    for (int i = node.num_keys; i > pos; i--)
+    {
+        node.internal.keys[i] = node.internal.keys[i - 1];
+    }
+
+    for (int i = node.num_keys + 1; i > pos + 1; i--)
+    {
+        node.internal.children_offsets[i] = node.internal.children_offsets[i - 1];
+    }
+
+    node.internal.keys[pos] = child_new_key;
+
+    node.internal.children_offsets[pos + 1] = child_new_offset;
+
+    node.num_keys++;
+
+    writeNode(current_offset, node);
 
     return false;
 }
