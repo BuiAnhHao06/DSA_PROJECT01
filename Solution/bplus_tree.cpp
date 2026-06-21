@@ -270,34 +270,160 @@ bool insertRecursive(int current_offset, int id, const char *payload, int &new_k
 
     int pos = binarySearch(node.internal.keys, node.num_keys, id);
 
-    if (pos < node.num_keys && id >= node.internal.keys[pos])
+    if (pos < node.num_keys &&
+        id >= node.internal.keys[pos])
+    {
         pos++;
+    }
 
     int child_new_key;
     int child_new_offset;
 
-    bool child_split = insertRecursive(node.internal.children_offsets[pos], id, payload, child_new_key, child_new_offset);
+    bool child_split =
+        insertRecursive(
+            node.internal.children_offsets[pos],
+            id,
+            payload,
+            child_new_key,
+            child_new_offset);
 
     if (!child_split)
+    {
         return false;
+    }
 
+    // =========================
+    // Tạo mảng tạm
+    // =========================
+
+    int temp_keys[MAX_INTERNAL_KEYS + 1];
+    int temp_children[MAX_INTERNAL_KEYS + 2];
+
+    // copy keys
+    for (int i = 0; i < node.num_keys; i++)
+    {
+        temp_keys[i] = node.internal.keys[i];
+    }
+
+    // copy children
+    for (int i = 0; i <= node.num_keys; i++)
+    {
+        temp_children[i] =
+            node.internal.children_offsets[i];
+    }
+
+    // chèn key mới
     for (int i = node.num_keys; i > pos; i--)
     {
-        node.internal.keys[i] = node.internal.keys[i - 1];
+        temp_keys[i] = temp_keys[i - 1];
     }
 
-    for (int i = node.num_keys + 1; i > pos + 1; i--)
+    temp_keys[pos] = child_new_key;
+
+    // chèn child mới
+    for (int i = node.num_keys + 1;
+         i > pos + 1;
+         i--)
     {
-        node.internal.children_offsets[i] = node.internal.children_offsets[i - 1];
+        temp_children[i] =
+            temp_children[i - 1];
     }
 
-    node.internal.keys[pos] = child_new_key;
+    temp_children[pos + 1] =
+        child_new_offset;
 
-    node.internal.children_offsets[pos + 1] = child_new_offset;
+    int total_keys =
+        node.num_keys + 1;
 
-    node.num_keys++;
+    // =========================
+    // Internal chưa đầy
+    // =========================
+
+    if (total_keys <= MAX_INTERNAL_KEYS)
+    {
+        node.num_keys = total_keys;
+
+        for (int i = 0; i < total_keys; i++)
+        {
+            node.internal.keys[i] =
+                temp_keys[i];
+        }
+
+        for (int i = 0; i <= total_keys; i++)
+        {
+            node.internal.children_offsets[i] =
+                temp_children[i];
+        }
+
+        writeNode(current_offset, node);
+
+        return false;
+    }
+
+    // =========================
+    // Internal đầy -> Split
+    // =========================
+
+    int median =
+        total_keys / 2;
+
+    BPlusNode new_internal;
+
+    memset(&new_internal,
+           0,
+           sizeof(BPlusNode));
+
+    new_internal.is_leaf = false;
+
+    // key đẩy lên cha
+    new_key =
+        temp_keys[median];
+
+    // node trái
+    node.num_keys =
+        median;
+
+    for (int i = 0;
+         i < median;
+         i++)
+    {
+        node.internal.keys[i] =
+            temp_keys[i];
+    }
+
+    for (int i = 0;
+         i <= median;
+         i++)
+    {
+        node.internal.children_offsets[i] =
+            temp_children[i];
+    }
+
+    // node phải
+    new_internal.num_keys =
+        total_keys - median - 1;
+
+    for (int i = 0;
+         i < new_internal.num_keys;
+         i++)
+    {
+        new_internal.internal.keys[i] =
+            temp_keys[median + 1 + i];
+    }
+
+    for (int i = 0;
+         i <= new_internal.num_keys;
+         i++)
+    {
+        new_internal.internal.children_offsets[i] =
+            temp_children[median + 1 + i];
+    }
+
+    new_offset =
+        allocateNode();
 
     writeNode(current_offset, node);
+    writeNode(new_offset, new_internal);
 
-    return false;
+    return true;
 }
