@@ -427,3 +427,21 @@ bool insertRecursive(int current_offset, int id, const char *payload, int &new_k
 
     return true;
 }
+
+int chooseChildLinear(const BPlusNode &node, int target)
+{
+    int pos = linearSearch(node.internal.keys, node.num_keys, target);
+    if (pos < node.num_keys && target >= node.internal.keys[pos])
+        pos++;
+
+    return pos;
+}
+
+int chooseChildBinary(const BPlusNode &node, int target)
+{
+    int pos = binarySearch(node.internal.keys, node.num_keys, target);
+    if (pos < node.num_keys && target >= node.internal.keys[pos])
+        pos++;
+
+    return pos;
+}

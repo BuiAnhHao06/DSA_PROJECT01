@@ -32,5 +32,10 @@ int binarySearch(const int keys[], int num_keys, int target);
 
 bool insertRecursive(int current_offset, int id, const char* payload, int& new_key, int& new_offset);
 
+// 
+
+int chooseChildLinear(const BPlusNode &node, int target);
+
+int chooseChildBinary(const BPlusNode &node, int target);
 
 #endif
