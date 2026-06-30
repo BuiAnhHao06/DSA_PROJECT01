@@ -445,3 +445,99 @@ int chooseChildBinary(const BPlusNode &node, int target)
 
     return pos;
 }
+
+int findLeafRecursive(int current_offset, int target, bool use_binary_search)
+{
+    if (current_offset == -1)
+        return -1;
+        
+    BPlusNode node;
+    readNode(current_offset, node);
+
+    if (node.is_leaf)
+        return current_offset;
+
+    int child_index;
+
+    if (use_binary_search)
+        child_index = chooseChildBinary(node, target);
+    else
+        child_index = chooseChildLinear(node, target);
+
+    // Đi tiếp xuống child
+    return findLeafRecursive(node.internal.children_offsets[child_index], target, use_binary_search);
+}
+
+int findStartLeaf(int start_id, bool use_binary_search)
+{
+    if (header.root_offset == -1)
+        return -1;
+
+    return findLeafRecursive(header.root_offset, start_id, use_binary_search);
+}
+
+int rangeRecursive(int current_offset, int start_id, int end_id, bool use_binary_search)
+{
+    BPlusNode node;
+    readNode(current_offset, node);
+
+    // =========================
+    // Leaf
+    // =========================
+    if (node.is_leaf)
+    {
+        int count = 0;
+
+        for (int i = 0; i < node.num_keys; i++)
+        {
+            int id = node.leaf.records[i].id;
+
+            if (id >= start_id && id <= end_id)
+            {
+                count++;
+            }
+
+            if (id > end_id)
+            {
+                break;
+            }
+        }
+
+        return count;
+    }
+
+    // =========================
+    // Internal
+    // =========================
+    int count = 0;
+
+    for (int i = 0; i <= node.num_keys; i++)
+    {
+        bool need_visit = false;
+
+        if (i == 0)
+        {
+            if (start_id < node.internal.keys[0])
+                need_visit = true;
+        }
+        else if (i == node.num_keys)
+        {
+            if (end_id >= node.internal.keys[node.num_keys - 1])
+                need_visit = true;
+        }
+        else
+        {
+            if (start_id < node.internal.keys[i] && end_id >= node.internal.keys[i - 1])
+            {
+                need_visit = true;
+            }
+        }
+
+        if (need_visit)
+        {
+            count += rangeRecursive(node.internal.children_offsets[i], start_id, end_id, use_binary_search);
+        }
+    }
+
+    return count;
+}
