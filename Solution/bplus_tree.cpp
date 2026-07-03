@@ -155,6 +155,36 @@ void openOrCreateDatabase(const char *filename)
     writeHeader();
 }
 
+void buildOrLoadDatabase(int N)
+{
+    char filename[50];
+    sprintf(filename, "index_%d.dat", N);
+
+    openOrCreateDatabase(filename);
+
+    if (header.root_offset != -1)
+    {
+        std::cout << "Load existing database: " << filename << "\n";
+        return;
+    }
+
+    std::cout << "Create database: " << filename << "\n";
+
+    std::cout << "Import " << N << " records..." << "\n";
+
+    char payload[PAYLOAD_SIZE];
+
+    for (int i = 1; i <= N; i++)
+    {
+        sprintf(payload, "payload%d", i);
+        insertRecord(i, payload);
+    }
+
+    writeHeader();
+
+    std::cout << "Import completed.\n";
+}
+
 int linearSearch(const int keys[], int num_keys, int target)
 {
     int i = 0;
@@ -450,7 +480,7 @@ int findLeafRecursive(int current_offset, int target, bool use_binary_search)
 {
     if (current_offset == -1)
         return -1;
-        
+
     BPlusNode node;
     readNode(current_offset, node);
 
