@@ -1,6 +1,7 @@
 dataset_large.csv
 dataset_*.csv
 index_*.dat
+smoke_index_*.dat
 *.exe
 *.o
 instruction.md
