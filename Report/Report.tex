@@ -65,6 +65,12 @@ The first page of the file stores the database header. It contains:
     \item \texttt{free\_list\_offset}: offset of the first reusable page, if any.
 \end{itemize}
 
+\subsection{Header Persistence}
+
+The header is the persistent entry point of the index file. When a new database file is created, the header is initialized with \texttt{root\_offset = -1}, \texttt{total\_nodes = 0}, and \texttt{free\_list\_offset = -1}. Every time the storage engine allocates a new node, \texttt{total\_nodes} is increased and the header is written back to offset 0. When root splitting creates a new root, \texttt{root\_offset} is also updated in the header and flushed to disk.
+
+This design allows the tree to survive closing and reopening the file. On reopen, the program reads the first page into \texttt{DBHeader}; \texttt{root\_offset} tells the search and insertion code where the current root page is, while \texttt{total\_nodes} tells \texttt{allocateNode} where the next unused page should be placed. A header persistence test creates a new file, allocates three nodes, writes a root offset, closes the file, and opens it again. The test passes only if the reopened file still reports the same \texttt{root\_offset} and \texttt{total\_nodes}, proving that metadata was stored on disk instead of only in memory.
+
 \subsection{Disk Layout}
 
 The database file is divided into fixed-size pages:
@@ -99,7 +105,13 @@ If a leaf exceeds its maximum capacity, it is split into two leaf nodes. The fir
 \text{old leaf} \rightarrow \text{new leaf} \rightarrow \text{old next leaf}
 \]
 
+For example, when inserting the 61st record into a leaf whose capacity is 60 records, the implementation first builds a temporary sorted array containing all 61 records. It then keeps the lower half in the original leaf and moves the upper half into a newly allocated leaf page. The separator key sent to the parent is the first key of the new right leaf. Because this key is copied upward rather than removed from the leaf, range scans can still find the actual record while moving only across leaf pages.
+
+Correctness also depends on maintaining the leaf linked list. The new right leaf receives the old \texttt{next\_leaf\_offset}, and the original leaf is updated so that its \texttt{next\_leaf\_offset} points to the new page. A split test inserts 61, 100, and 200 records in pseudo-random order, locates the leftmost leaf, and follows \texttt{next\_leaf\_offset} until the end. The test succeeds only if the traversal returns every record exactly once and in increasing key order.
+
 If an internal node overflows, the median key is pushed up to the parent. The median key is removed from the split children. If the root overflows, a new root is created and \texttt{header.root\_offset} is updated.
+
+The key difference is that a leaf split copies the separator key upward, while an internal split moves the median key upward. In a leaf split, the separator must remain in the right leaf because leaves store the actual records. In an internal split, the median key is only a routing separator, so it is removed from both resulting children and stored in the parent. An internal split test inserts enough records to force the old root internal node to split, prints the tree height for debugging, verifies that every internal node has exactly \texttt{num\_keys + 1} active children, and then follows the leaf linked list to confirm that all leaves are still connected in sorted order.
 
 \subsection{Point Query}
 

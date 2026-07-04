@@ -506,6 +506,120 @@ int findStartLeaf(int start_id, bool use_binary_search)
     return findLeafRecursive(header.root_offset, start_id, use_binary_search);
 }
 
+static bool pointQueryLeafOnly(int target_id, bool use_binary_search)
+{
+    int current_offset = header.root_offset;
+    while (current_offset != -1)
+    {
+        BPlusNode node;
+        readNode(current_offset, node);
+
+        if (node.is_leaf)
+        {
+            for (int i = 0; i < node.num_keys; i++)
+            {
+                int id = node.leaf.records[i].id;
+                if (id == target_id)
+                {
+                    return true;
+                }
+                if (id > target_id)
+                {
+                    return false;
+                }
+            }
+
+            return false;
+        }
+
+        int child_index;
+        if (use_binary_search)
+        {
+            child_index = chooseChildBinary(node, target_id);
+        }
+        else
+        {
+            child_index = chooseChildLinear(node, target_id);
+        }
+
+        current_offset = node.internal.children_offsets[child_index];
+    }
+
+    return false;
+}
+
+bool pointQueryBPlusStyle(int target_id, bool use_binary_search)
+{
+    return pointQueryLeafOnly(target_id, use_binary_search);
+}
+
+bool pointQueryBTreeStyle(int target_id, bool use_binary_search)
+{
+    return pointQueryLeafOnly(target_id, use_binary_search);
+}
+
+int rangeQueryBPlusStyle(int start_id, int end_id, bool use_binary_search)
+{
+    if (start_id > end_id)
+    {
+        return 0;
+    }
+
+    int count = 0;
+    int current_offset = header.root_offset;
+
+    while (current_offset != -1)
+    {
+        BPlusNode node;
+        readNode(current_offset, node);
+
+        if (!node.is_leaf)
+        {
+            int child_index;
+            if (use_binary_search)
+            {
+                child_index = chooseChildBinary(node, start_id);
+            }
+            else
+            {
+                child_index = chooseChildLinear(node, start_id);
+            }
+
+            current_offset = node.internal.children_offsets[child_index];
+            continue;
+        }
+
+        for (int i = 0; i < node.num_keys; i++)
+        {
+            int id = node.leaf.records[i].id;
+
+            if (id > end_id)
+            {
+                return count;
+            }
+
+            if (id >= start_id)
+            {
+                count++;
+            }
+        }
+
+        current_offset = node.leaf.next_leaf_offset;
+    }
+
+    return count;
+}
+
+int rangeQueryBTreeStyle(int start_id, int end_id, bool use_binary_search)
+{
+    if (start_id > end_id || header.root_offset == -1)
+    {
+        return 0;
+    }
+
+    return rangeRecursive(header.root_offset, start_id, end_id, use_binary_search);
+}
+
 int rangeRecursive(int current_offset, int start_id, int end_id, bool use_binary_search)
 {
     BPlusNode node;

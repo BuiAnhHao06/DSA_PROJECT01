@@ -150,11 +150,76 @@ void runBenchmark(int N, const vector<int> &query_ids, const AppConfig &config)
 
     int range_size = (N < config.range_threshold) ? config.range_small : config.range_large;
 
-    // TODO for students: Run config.query_count queries (using query_ids) for each of the 8 scenarios.
-    // Calculate and print the average Execution Time (ns) and Disk Reads.
-    // Hint: start_id for Range Query is query_ids[j], and end_id is query_ids[j] + range_size.
     cout << "Configured query count: " << query_ids.size() << "\n";
     cout << "Configured range size: " << range_size << "\n";
+
+    struct Scenario
+    {
+        const char *name;
+        bool is_range_query;
+        bool use_bplus_style;
+        bool use_binary_search;
+    };
+
+    const Scenario scenarios[] = {
+        {"Point B-Tree Linear", false, false, false},
+        {"Point B-Tree Binary", false, false, true},
+        {"Point B+ Tree Linear", false, true, false},
+        {"Point B+ Tree Binary", false, true, true},
+        {"Range B-Tree Linear", true, false, false},
+        {"Range B-Tree Binary", true, false, true},
+        {"Range B+ Tree Linear", true, true, false},
+        {"Range B+ Tree Binary", true, true, true},
+    };
+
+    for (const Scenario &scenario : scenarios)
+    {
+        long long total_time_ns = 0;
+        long long total_disk_reads = 0;
+
+        for (size_t j = 0; j < query_ids.size(); j++)
+        {
+            int target_id = query_ids[j];
+            resetIOCounters();
+
+            auto start = high_resolution_clock::now();
+            if (scenario.is_range_query)
+            {
+                int end_id = target_id + range_size;
+                if (scenario.use_bplus_style)
+                {
+                    rangeQueryBPlusStyle(target_id, end_id, scenario.use_binary_search);
+                }
+                else
+                {
+                    rangeQueryBTreeStyle(target_id, end_id, scenario.use_binary_search);
+                }
+            }
+            else
+            {
+                if (scenario.use_bplus_style)
+                {
+                    pointQueryBPlusStyle(target_id, scenario.use_binary_search);
+                }
+                else
+                {
+                    pointQueryBTreeStyle(target_id, scenario.use_binary_search);
+                }
+            }
+            auto end = high_resolution_clock::now();
+
+            total_time_ns += duration_cast<nanoseconds>(end - start).count();
+            total_disk_reads += disk_read_count;
+        }
+
+        double mean_time_ns = static_cast<double>(total_time_ns) / query_ids.size();
+        double mean_disk_reads = static_cast<double>(total_disk_reads) / query_ids.size();
+
+        cout << "RESULT | N=" << N
+             << " | Scenario=" << scenario.name
+             << " | MeanTimeNs=" << mean_time_ns
+             << " | MeanDiskReads=" << mean_disk_reads << "\n";
+    }
 }
 
 int main() {
@@ -201,20 +266,21 @@ int main() {
         int N = config.data_sizes[i];
         string filename = config.index_prefix + to_string(N) + ".dat";
 
-        // TODO for students: Open or initialize the index_N.dat binary DB file at offset 0
-        // ...
+        openOrCreateDatabase(filename.c_str());
+        if (db_file == nullptr) {
+            cerr << "Error: Could not open or create " << filename << "!\n";
+            return 1;
+        }
 
         // DATA SIZE WARNING: dataset_large.csv contains 10,000,000 rows (~700MB). Reading and writing
         // this file can take 5 - 15 minutes. It is highly recommended to debug with N <= 1,000,000 first.
-        // If the DB is new, insert the first N records from dataset_large.csv
-        // TODO for students: Implement the CSV reading and insertion logic for the first N records
-        /*
         if (header.root_offset == -1) {
             cout << "Importing " << N << " records...\n";
             ifstream csv_file(config.dataset_file);
             if (!csv_file.is_open()) {
                 cerr << "Error: Could not find " << config.dataset_file << "!\n";
-                // fclose(db_file);
+                fclose(db_file);
+                db_file = nullptr;
                 return 1;
             }
 
@@ -223,21 +289,36 @@ int main() {
 
             int count = 0;
             while (count < N && getline(csv_file, line)) {
-                // Parse ID and Payload from the CSV line
-                // Call insertRecord(...)
+                stringstream ss(line);
+                string id_str;
+                string payload_str;
+
+                getline(ss, id_str, ',');
+                getline(ss, payload_str);
+
+                char payload[PAYLOAD_SIZE];
+                strncpy(payload, payload_str.c_str(), PAYLOAD_SIZE - 1);
+                payload[PAYLOAD_SIZE - 1] = '\0';
+
+                insertRecord(stoi(id_str), payload);
                 count++;
             }
             csv_file.close();
+
+            if (count < N) {
+                cerr << "Error: " << config.dataset_file << " contains only " << count
+                     << " data records, but N=" << N << " was requested.\n";
+                fclose(db_file);
+                db_file = nullptr;
+                return 1;
+            }
         }
-        */
 
-        // Run benchmark on this database file
-        // runBenchmark(N, query_ids, config);
         cout << "Prepared benchmark file name: " << filename << "\n";
+        runBenchmark(N, query_ids, config);
 
-        // TODO for students: Close the file
-        // fclose(db_file);
-        // db_file = nullptr;
+        fclose(db_file);
+        db_file = nullptr;
     }
     return 0;
 }

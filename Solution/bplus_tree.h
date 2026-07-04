@@ -44,6 +44,14 @@ int findLeafRecursive(int current_offset, int target, bool use_binary_search);
 
 int findStartLeaf(int start_id, bool use_binary_search);
 
+bool pointQueryBPlusStyle(int target_id, bool use_binary_search);
+
+bool pointQueryBTreeStyle(int target_id, bool use_binary_search);
+
+int rangeQueryBPlusStyle(int start_id, int end_id, bool use_binary_search);
+
+int rangeQueryBTreeStyle(int start_id, int end_id, bool use_binary_search);
+
 int rangeRecursive(int current_offset, int start_id, int end_id, bool use_binary_search);
 
 #endif
