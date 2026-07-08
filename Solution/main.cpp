@@ -157,14 +157,17 @@ void runBenchmark(int N, const vector<int> &query_ids, const AppConfig &config)
     cout << "Configured range size: " << range_size << "\n";
 }
 
-int main() {
+int main()
+{
     AppConfig config = loadConfig("config.txt");
 
-    if (config.query_count <= 0) {
+    if (config.query_count <= 0)
+    {
         cerr << "Error: query_count must be positive.\n";
         return 1;
     }
-    if (config.data_sizes.empty()) {
+    if (config.data_sizes.empty())
+    {
         cerr << "Error: data_sizes must contain at least one value.\n";
         return 1;
     }
@@ -174,13 +177,15 @@ int main() {
     query_ids.reserve(config.query_count);
 
     ifstream csv_setup_file(config.dataset_file);
-    if (!csv_setup_file.is_open()) {
+    if (!csv_setup_file.is_open())
+    {
         cerr << "Error: Could not find " << config.dataset_file << ". Run data_generator.cpp first!\n";
         return 1;
     }
     string setup_line;
     getline(csv_setup_file, setup_line); // Skip header row
-    while ((int)query_ids.size() < config.query_count && getline(csv_setup_file, setup_line)) {
+    while ((int)query_ids.size() < config.query_count && getline(csv_setup_file, setup_line))
+    {
         stringstream ss(setup_line);
         string id_str;
         getline(ss, id_str, ',');
@@ -188,7 +193,8 @@ int main() {
     }
     csv_setup_file.close();
 
-    if ((int)query_ids.size() < config.query_count) {
+    if ((int)query_ids.size() < config.query_count)
+    {
         cerr << "Error: " << config.dataset_file << " does not contain enough records ("
              << config.query_count << " required) for benchmarking!\n";
         return 1;
@@ -197,13 +203,20 @@ int main() {
     cout << "Dataset file: " << config.dataset_file << "\n";
     cout << "Query count: " << config.query_count << "\n";
 
-    for (size_t i = 0; i < config.data_sizes.size(); ++i) {
+    for (size_t i = 0; i < config.data_sizes.size(); ++i)
+    {
         int N = config.data_sizes[i];
         string filename = config.index_prefix + to_string(N) + ".dat";
 
         // TODO for students: Open or initialize the index_N.dat binary DB file at offset 0
         // ...
+        cout << "\n========================================\n";
+        cout << "Preparing database with N = " << N << "\n";
+        cout << "========================================\n";
 
+        buildOrLoadDatabase(filename.c_str(), config.dataset_file.c_str(), N);
+
+        cout << "Database file : " << filename << "\n";
         // DATA SIZE WARNING: dataset_large.csv contains 10,000,000 rows (~700MB). Reading and writing
         // this file can take 5 - 15 minutes. It is highly recommended to debug with N <= 1,000,000 first.
         // If the DB is new, insert the first N records from dataset_large.csv
@@ -232,12 +245,16 @@ int main() {
         */
 
         // Run benchmark on this database file
-        // runBenchmark(N, query_ids, config);
-        cout << "Prepared benchmark file name: " << filename << "\n";
+        runBenchmark(N, query_ids, config);
 
         // TODO for students: Close the file
         // fclose(db_file);
         // db_file = nullptr;
+        if (db_file != nullptr)
+        {
+            fclose(db_file);
+            db_file = nullptr;
+        }
     }
     return 0;
 }

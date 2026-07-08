@@ -155,33 +155,51 @@ void openOrCreateDatabase(const char *filename)
     writeHeader();
 }
 
-void buildOrLoadDatabase(int N)
+void buildOrLoadDatabase(const char *index_filename, const char *dataset_filename, int N)
 {
-    char filename[50];
-    sprintf(filename, "index_%d.dat", N);
-
-    openOrCreateDatabase(filename);
+    openOrCreateDatabase(index_filename);
 
     if (header.root_offset != -1)
     {
-        std::cout << "Load existing database: " << filename << "\n";
+        std::cout << "Load existing database: " << index_filename << "\n";
         return;
     }
 
-    std::cout << "Create database: " << filename << "\n";
+    std::cout << "Create database: " << index_filename << "\n";
 
-    std::cout << "Import " << N << " records..." << "\n";
+    std::cout << "Import " << N << " records...\n";
 
-    char payload[PAYLOAD_SIZE];
+    std::ifstream csv_file(dataset_filename);
 
-    for (int i = 1; i <= N; i++)
+    if (!csv_file.is_open())
     {
-        sprintf(payload, "payload%d", i);
-        insertRecord(i, payload);
+        std::cerr << "Error: Could not find " << dataset_filename << "!\n";
+        return;
     }
 
-    writeHeader();
+    std::string line;
 
+    getline(csv_file, line);
+
+    int count = 0;
+
+    while (count < N && getline(csv_file, line))
+    {
+        std::stringstream ss(line);
+
+        std::string id_str;
+        std::string payload;
+
+        getline(ss, id_str, ',');
+        getline(ss, payload);
+
+        insertRecord(stoi(id_str), payload.c_str());
+        count++;
+    }
+
+    csv_file.close();
+
+    writeHeader();
     std::cout << "Import completed.\n";
 }
 

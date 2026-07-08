@@ -2,6 +2,8 @@
 #define BPLUS_TREE_H
 
 #include <cstring>
+#include <fstream>
+#include <sstream>
 #include "bplus_tree_disk.h"
 
 extern FILE *db_file;
@@ -26,7 +28,7 @@ void writeHeader();
 
 void openOrCreateDatabase(const char *filename);
 
-void buildOrLoadDatabase(int N);
+void buildOrLoadDatabase(const char *index_filename, const char *dataset_filename, int N);
 
 int linearSearch(const int keys[], int num_keys, int target);
 
