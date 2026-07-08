@@ -1,5 +1,37 @@
 #include "bplus_tree.h"
 
+static void copyPayload(char destination[PAYLOAD_SIZE], const char *source)
+{
+    if (source == nullptr)
+    {
+        destination[0] = '\0';
+        return;
+    }
+
+    strncpy(destination, source, PAYLOAD_SIZE - 1);
+    destination[PAYLOAD_SIZE - 1] = '\0';
+}
+
+static int leafLowerBound(const BPlusNode &node, int target)
+{
+    int left = 0;
+    int right = node.num_keys;
+    while (left < right)
+    {
+        int mid = (left + right) / 2;
+        if (node.leaf.records[mid].id < target)
+        {
+            left = mid + 1;
+        }
+        else
+        {
+            right = mid;
+        }
+    }
+
+    return left;
+}
+
 void readNode(int offset, BPlusNode &node)
 {
     if (db_file == nullptr)
@@ -73,7 +105,7 @@ void insertRecord(int id, const char *payload)
         root.leaf.next_leaf_offset = -1;
 
         root.leaf.records[0].id = id;
-        strcpy(root.leaf.records[0].payload, payload);
+        copyPayload(root.leaf.records[0].payload, payload);
 
         header.root_offset = allocateNode();
 
@@ -233,7 +265,7 @@ bool insertRecursive(int current_offset, int id, const char *payload, int &new_k
             }
 
             node.leaf.records[pos].id = id;
-            strcpy(node.leaf.records[pos].payload, payload);
+            copyPayload(node.leaf.records[pos].payload, payload);
 
             node.num_keys++;
 
@@ -260,7 +292,7 @@ bool insertRecursive(int current_offset, int id, const char *payload, int &new_k
         }
 
         temp[pos].id = id;
-        strcpy(temp[pos].payload, payload);
+        copyPayload(temp[pos].payload, payload);
 
         int split = (MAX_LEAF_KEYS + 1) / 2;
 
@@ -516,6 +548,12 @@ static bool pointQueryLeafOnly(int target_id, bool use_binary_search)
 
         if (node.is_leaf)
         {
+            if (use_binary_search)
+            {
+                int left = leafLowerBound(node, target_id);
+                return left < node.num_keys && node.leaf.records[left].id == target_id;
+            }
+
             for (int i = 0; i < node.num_keys; i++)
             {
                 int id = node.leaf.records[i].id;
@@ -589,7 +627,8 @@ int rangeQueryBPlusStyle(int start_id, int end_id, bool use_binary_search)
             continue;
         }
 
-        for (int i = 0; i < node.num_keys; i++)
+        int start_index = use_binary_search ? leafLowerBound(node, start_id) : 0;
+        for (int i = start_index; i < node.num_keys; i++)
         {
             int id = node.leaf.records[i].id;
 
@@ -617,7 +656,16 @@ int rangeQueryBTreeStyle(int start_id, int end_id, bool use_binary_search)
         return 0;
     }
 
-    return rangeRecursive(header.root_offset, start_id, end_id, use_binary_search);
+    int count = 0;
+    for (int id = start_id; id <= end_id; id++)
+    {
+        if (pointQueryBTreeStyle(id, use_binary_search))
+        {
+            count++;
+        }
+    }
+
+    return count;
 }
 
 int rangeRecursive(int current_offset, int start_id, int end_id, bool use_binary_search)

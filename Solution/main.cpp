@@ -144,7 +144,7 @@ void resetIOCounters()
 // int rangeQueryBPlusStyle(int start_id, int end_id, bool use_binary_search);
 // int rangeQueryBTreeStyle(int start_id, int end_id, bool use_binary_search);
 
-void runBenchmark(int N, const vector<int> &query_ids, const AppConfig &config)
+void runBenchmark(int N, const vector<int> &query_ids, const AppConfig &config, ofstream &results_csv)
 {
     cout << "\n========== BENCHMARK WITH N = " << N << " ==========\n";
 
@@ -156,20 +156,23 @@ void runBenchmark(int N, const vector<int> &query_ids, const AppConfig &config)
     struct Scenario
     {
         const char *name;
+        const char *query_type;
+        const char *style;
+        const char *search_type;
         bool is_range_query;
         bool use_bplus_style;
         bool use_binary_search;
     };
 
     const Scenario scenarios[] = {
-        {"Point B-Tree Linear", false, false, false},
-        {"Point B-Tree Binary", false, false, true},
-        {"Point B+ Tree Linear", false, true, false},
-        {"Point B+ Tree Binary", false, true, true},
-        {"Range B-Tree Linear", true, false, false},
-        {"Range B-Tree Binary", true, false, true},
-        {"Range B+ Tree Linear", true, true, false},
-        {"Range B+ Tree Binary", true, true, true},
+        {"Point B-Tree Linear", "point", "BTree", "linear", false, false, false},
+        {"Point B-Tree Binary", "point", "BTree", "binary", false, false, true},
+        {"Point B+ Tree Linear", "point", "BPlus", "linear", false, true, false},
+        {"Point B+ Tree Binary", "point", "BPlus", "binary", false, true, true},
+        {"Range B-Tree Linear", "range", "BTree", "linear", true, false, false},
+        {"Range B-Tree Binary", "range", "BTree", "binary", true, false, true},
+        {"Range B+ Tree Linear", "range", "BPlus", "linear", true, true, false},
+        {"Range B+ Tree Binary", "range", "BPlus", "binary", true, true, true},
     };
 
     for (const Scenario &scenario : scenarios)
@@ -185,7 +188,7 @@ void runBenchmark(int N, const vector<int> &query_ids, const AppConfig &config)
             auto start = high_resolution_clock::now();
             if (scenario.is_range_query)
             {
-                int end_id = target_id + range_size;
+                int end_id = target_id + range_size - 1;
                 if (scenario.use_bplus_style)
                 {
                     rangeQueryBPlusStyle(target_id, end_id, scenario.use_binary_search);
@@ -219,6 +222,15 @@ void runBenchmark(int N, const vector<int> &query_ids, const AppConfig &config)
              << " | Scenario=" << scenario.name
              << " | MeanTimeNs=" << mean_time_ns
              << " | MeanDiskReads=" << mean_disk_reads << "\n";
+
+        results_csv << N << ","
+                    << scenario.query_type << ","
+                    << scenario.style << ","
+                    << scenario.search_type << ","
+                    << range_size << ","
+                    << query_ids.size() << ","
+                    << mean_time_ns << ","
+                    << mean_disk_reads << "\n";
     }
 }
 
@@ -240,7 +252,8 @@ int main() {
 
     ifstream csv_setup_file(config.dataset_file);
     if (!csv_setup_file.is_open()) {
-        cerr << "Error: Could not find " << config.dataset_file << ". Run data_generator.cpp first!\n";
+        cerr << "Error: Could not find " << config.dataset_file
+             << ". Compile and run Solution/data_generator.cpp first!\n";
         return 1;
     }
     string setup_line;
@@ -261,6 +274,13 @@ int main() {
 
     cout << "Dataset file: " << config.dataset_file << "\n";
     cout << "Query count: " << config.query_count << "\n";
+
+    ofstream results_csv("benchmark_results.csv");
+    if (!results_csv.is_open()) {
+        cerr << "Error: Could not create benchmark_results.csv!\n";
+        return 1;
+    }
+    results_csv << "N,query_type,style,search_type,range_size,query_count,mean_time_ns,mean_disk_reads\n";
 
     for (size_t i = 0; i < config.data_sizes.size(); ++i) {
         int N = config.data_sizes[i];
@@ -315,10 +335,12 @@ int main() {
         }
 
         cout << "Prepared benchmark file name: " << filename << "\n";
-        runBenchmark(N, query_ids, config);
+        runBenchmark(N, query_ids, config, results_csv);
 
         fclose(db_file);
         db_file = nullptr;
     }
+    results_csv.close();
+    cout << "Benchmark CSV: benchmark_results.csv\n";
     return 0;
 }

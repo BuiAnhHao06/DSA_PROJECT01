@@ -1,9 +1,9 @@
 # Small smoke-test defaults. Increase these values for the final benchmark.
-dataset_file=dataset_small.csv
-generated_record_count=1000
-query_count=10
-data_sizes=100,500,1000
+dataset_file=dataset_large.csv
+generated_record_count=10000000
+query_count=100
+data_sizes=1000,3000,10000,30000,100000,300000,1000000,3000000,10000000
 range_threshold=2000
-range_small=50
-range_large=100
+range_small=500
+range_large=1000
 index_prefix=index_

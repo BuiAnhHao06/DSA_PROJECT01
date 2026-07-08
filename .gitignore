@@ -7,3 +7,5 @@ smoke_index_*.dat
 instruction.md
 out
 data_generator.cpp
+!Solution/data_generator.cpp
+main

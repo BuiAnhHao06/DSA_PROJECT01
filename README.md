@@ -22,7 +22,7 @@ These values avoid generating the full 10,000,000-row dataset while debugging.
 Build and run the data generator:
 
 ```bash
-g++ data_generator.cpp -o data_generator.exe
+g++ Solution/data_generator.cpp -o data_generator.exe
 ./data_generator.exe
 ```
 
@@ -40,7 +40,7 @@ Run the main program:
 ./main.exe
 ```
 
-With the default small config, the program should read `dataset_small.csv`, load 10 query IDs, and iterate over data sizes `100`, `500`, and `1000`.
+With the default small config, the program should read the configured dataset file, load query IDs, and iterate over the configured data sizes.
 
 ## Automated Smoke Test
 
@@ -82,7 +82,7 @@ index_prefix=index_
 
 Generated datasets, index files, executables, and object files are ignored by git.
 
-Note: the current source still contains TODO sections for the B+ Tree insert/query implementation. The smoke test verifies the runnable pipeline skeleton; after implementing the tree logic, it can be extended to check real point and range query results.
+If `config.txt` is not present, both the data generator and the benchmark program use built-in defaults. The main benchmark still requires the dataset CSV to exist, so run the data generator before running `main.exe`.
 
 ## Git Workflow
 
